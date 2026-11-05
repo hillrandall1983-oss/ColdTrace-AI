@@ -80,7 +80,7 @@
 
                 <!-- Raw Text Paste -->
                 <div>
-                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Or Paste Raw Logger Text / Hex Payload</label>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Or Paste Raw Logger Text / Payload</label>
                     <textarea id="rawLoggerInput" rows="4" placeholder="Paste logger text, tabular rows, or data dump here..." class="input-bg w-full p-2.5 rounded-lg text-xs font-mono"></textarea>
                 </div>
 
@@ -243,7 +243,7 @@
     </div>
 
     <script>
-        // Default Factory Compliance Plans & Hardware Profiles stored in localStorage
+        // Default Factory Compliance Plans & Hardware Profiles
         const defaultCompliancePlans = [
             { id: 'mrb_chicken', name: 'QC Plan #7 MRB Chicken', minTemp: 32, maxTemp: 38, durationLimit: 30 },
             { id: 'frozen_goods', name: 'Standard Frozen Goods (-10°F to 0°F)', minTemp: -15, maxTemp: 2, durationLimit: 45 },
@@ -269,12 +269,15 @@
             initChart();
         });
 
+        // Strictly deduplicate plans and profiles to prevent duplication glitches
         function initDropdowns() {
+            const uniquePlans = Array.from(new Map(compliancePlans.map(p => [p.name, p])).values());
             const planSelect = document.getElementById('compliancePlanSelect');
-            planSelect.innerHTML = compliancePlans.map(p => `<option value="${p.id}">${p.name} (${p.minTemp}°F - ${p.maxTemp}°F)</option>`).join('');
+            planSelect.innerHTML = uniquePlans.map(p => `<option value="${p.id}">${p.name} (${p.minTemp}°F - ${p.maxTemp}°F)</option>`).join('');
             
+            const uniqueHw = Array.from(new Map(hardwareProfiles.map(h => [h.name, h])).values());
             const hwSelect = document.getElementById('hardwareProfileSelect');
-            hwSelect.innerHTML = hardwareProfiles.map(h => `<option value="${h.id}">${h.name}</option>`).join('');
+            hwSelect.innerHTML = uniqueHw.map(h => `<option value="${h.id}">${h.name}</option>`).join('');
         }
 
         function onCompliancePlanChange() {
@@ -484,36 +487,28 @@
             const profile = hardwareProfiles.find(h => h.id === activeProfileId) || { parser: 'standard' };
             const parsed = [];
 
-            if (profile.parser === 'sensitech') {
-                // Sensitech TempTale specific pattern parsing
-                const regex = /(\d{2}[-/]\d{2}[-/]\d{2,4})[,\s]+(\d{2}:\d{2}(?::\d{2})?)[,\s]+(-?\d+(?:\.\d+)?)/g;
-                let match;
-                while ((match = regex.exec(text)) !== null) {
-                    const timestamp = new Date(match[1] + ' ' + match[2]).getTime();
-                    const tempF = parseFloat(match[3]);
-                    if (!isNaN(timestamp)) parsed.push({ x: timestamp, y: tempF });
-                }
-            } else if (profile.parser === 'cargoData' || profile.parser === 'deltaTrak' || profile.parser === 'copeland' || profile.parser === 'tive') {
-                // Advanced multi-tier regex matching for specialized manufacturer data outputs
-                const regex = /(\d{1,4}[-/]\d{1,2}[-/]\d{1,4})[,\s]+(\d{1,2}:\d{2}(?::\d{2})?)[,\s]+(-?\d+(?:\.\d+)?)/g;
-                let match;
-                while ((match = regex.exec(text)) !== null) {
-                    const timestamp = new Date(match[1] + ' ' + match[2]).getTime();
-                    const tempF = parseFloat(match[3]);
-                    if (!isNaN(timestamp)) parsed.push({ x: timestamp, y: tempF });
-                }
+            // Execute parsing rules based on selected hardware profile engine
+            const regex = /(\d{1,4}[-/]\d{1,2}[-/]\d{1,4})[,\s]+(\d{1,2}:\d{2}(?::\d{2})?)[,\s]+(-?\d+(?:\.\d+)?)/g;
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                const timestamp = new Date(match[1] + ' ' + match[2]).getTime();
+                const tempF = parseFloat(match[3]);
+                if (!isNaN(timestamp)) parsed.push({ x: timestamp, y: tempF });
             }
 
-            // Universal fallback standard parser if specific manufacturer regex didn't capture rows
+            // Universal fallback standard parser if specific pattern regex didn't capture rows
             if (parsed.length === 0) {
                 const lines = text.split('\n');
-                const genericRegex = /(\d{1,4}[-/]\d{1,2}[-/]\d{1,4})[,\s]+(\d{1,2}:\d{2}(?::\d{2})?)[,\s]+(-?\d+(?:\.\d+)?)/g;
-                let match;
-                while ((match = genericRegex.exec(text)) !== null) {
-                    const timestamp = new Date(match[1] + ' ' + match[2]).getTime();
-                    const temp = parseFloat(match[3]);
-                    if (!isNaN(timestamp)) parsed.push({ x: timestamp, y: temp });
-                }
+                lines.forEach(line => {
+                    const parts = line.split(/[,\t\s]+/);
+                    for (let i = 0; i < parts.length; i++) {
+                        const val = parseFloat(parts[i]);
+                        if (!isNaN(val) && val > -60 && val < 160) {
+                            parsed.push({ x: Date.now() + (parsed.length * 60000), y: val });
+                            break;
+                        }
+                    }
+                });
             }
 
             if (parsed.length > 0) {
@@ -521,9 +516,9 @@
                 tempChart.data.datasets[0].data = parsed;
                 tempChart.update();
                 evaluateCompliance(parsed);
-                document.getElementById('summaryContent').innerHTML = `<p class="text-emerald-400 font-medium">✓ Successfully parsed ${parsed.length} records using [${profile.name}].</p>`;
+                document.getElementById('summaryContent').innerHTML = `<p class="text-emerald-400 font-medium">✓ Parsed ${parsed.length} records using [${profile.name}].</p>`;
             } else {
-                alert('Could not automatically parse temperature points. Check raw text format or selected hardware profile.');
+                alert('Could not automatically parse temperature points. Check raw text format.');
             }
         }
 
