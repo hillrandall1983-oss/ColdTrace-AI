@@ -1,0 +1,1839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ColdTrace AI — Enterprise Inbound Cold Chain Inspector</title>
+    <!-- SheetJS from official CDN -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <!-- PDF.js for PDF text extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
+    <style>
+        :root {
+            --primary: #38bdf8;
+            --primary-hover: #0ea5e9;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --border-color: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --pass-bg: rgba(22, 101, 52, 0.3);
+            --pass-text: #4ade80;
+            --fail-bg: rgba(153, 27, 27, 0.3);
+            --fail-text: #f87171;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            padding: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-top: 4px;
+            font-style: italic;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 24px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-main);
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        select, input[type="file"], input[type="datetime-local"], input[type="number"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            background-color: #0f172a;
+            color: var(--text-main);
+        }
+
+        input[type="file"]::file-selector-button {
+            background: var(--border-color);
+            color: var(--text-main);
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        .btn {
+            background: var(--primary);
+            color: #0f172a;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background: var(--border-color);
+            color: var(--text-main);
+        }
+
+        .btn-secondary:hover {
+            background: #475569;
+        }
+
+        .btn-danger {
+            background: rgba(153, 27, 27, 0.4);
+            color: #fca5a5;
+            border: 1px solid #7f1d1d;
+        }
+
+        .btn-danger:hover {
+            background: rgba(153, 27, 27, 0.7);
+        }
+
+        .btn-reset {
+            background: rgba(153, 27, 27, 0.4);
+            color: #fca5a5;
+            border: 1px solid #7f1d1d;
+            width: 100%;
+            margin-top: 12px;
+        }
+
+        .btn-reset:hover {
+            background: rgba(153, 27, 27, 0.7);
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        .status-pass {
+            background: var(--pass-bg);
+            color: var(--pass-text);
+            border: 1px solid rgba(74, 222, 128, 0.3);
+        }
+
+        .status-fail {
+            background: var(--fail-bg);
+            color: var(--fail-text);
+            border: 1px solid rgba(248, 113, 113, 0.3);
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            background: #0f172a;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .chart-controls div {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .chart-controls input {
+            width: auto;
+            padding: 6px 8px;
+        }
+
+        .zoom-toolbar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+
+        .btn-zoom {
+            padding: 4px 10px;
+            font-size: 0.8rem;
+            background: var(--border-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .btn-zoom:hover {
+            background: #475569;
+        }
+
+        canvas {
+            width: 100%;
+            height: 380px;
+            background: #0f172a;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            cursor: crosshair;
+            user-select: none;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            margin-top: 8px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background: #0f172a;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .table-total-row {
+            background: #0f172a;
+            font-weight: 700;
+            border-top: 2px solid var(--border-color);
+        }
+
+        .util-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 700;
+            display: inline-block;
+        }
+        .util-green { background: rgba(22, 101, 52, 0.3); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3); }
+        .util-yellow { background: rgba(133, 77, 14, 0.3); color: #facc15; border: 1px solid rgba(250, 204, 21, 0.3); }
+        .util-red { background: rgba(153, 27, 27, 0.3); color: #f87171; border: 1px solid rgba(248, 113, 113, 0.3); }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 24px;
+            border-radius: 8px;
+            width: 580px;
+            max-width: 90vw;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .tier-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+
+        .tier-row input, .tier-row select {
+            padding: 6px;
+            background: #0f172a;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+        }
+
+        .audit-box {
+            background: rgba(2, 132, 199, 0.15);
+            border-left: 4px solid var(--primary);
+            padding: 14px;
+            border-radius: 0 6px 6px 0;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #7dd3fc;
+            margin-top: 12px;
+            border-top: 1px solid rgba(56, 189, 248, 0.2);
+            border-right: 1px solid rgba(56, 189, 248, 0.2);
+            border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+        }
+
+        @media print {
+            body { background: white; color: black; padding: 0; }
+            aside, .chart-controls, .zoom-toolbar, header button, .btn { display: none !important; }
+            .grid-container { display: block; }
+            .card { border: none; box-shadow: none; padding: 0; margin-bottom: 20px; }
+            .audit-box { background: #f0f9ff; color: #0369a1; border-left: 4px solid #0284c7; }
+            table th { background: #f1f5f9; color: #334155; }
+            table td, table th { border-color: #cbd5e1; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h1>❄️ ColdTrace AI</h1>
+            <div class="subtitle">Enterprise Inbound Cold Chain & Temp Logger Inspector</div>
+        </div>
+        <div>
+            <button class="btn btn-secondary" onclick="exportInspectionReport()">🖨️ Export Inspection Report</button>
+        </div>
+    </header>
+
+    <div class="grid-container">
+        <!-- Sidebar Controls -->
+        <aside>
+            <div class="card">
+                <div class="card-title">Data Ingestion</div>
+                
+                <div class="form-group">
+                    <label>Select Compliance Plan</label>
+                    <select id="plan-select" onchange="evaluateCompliance()"></select>
+                    <button class="btn btn-secondary" style="margin-top: 8px; width: 100%; font-size: 0.8rem;" onclick="openPlanModal()">⚙️ Custom Plan Editor</button>
+                </div>
+
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="margin:0;">Logger Hardware Profile</label>
+                        <button class="btn btn-secondary" style="padding: 2px 6px; font-size: 0.75rem;" onclick="openProfileModal()">✏️ Edit Profiles</button>
+                    </div>
+                    <select id="logger-profile-select"></select>
+                </div>
+
+                <div class="form-group">
+                    <label>Upload Logger File (CSV, LOG, TXT, JSON, XLSX, XLS, PDF)</label>
+                    <input type="file" id="file-input" accept=".csv,.txt,.log,.json,.xlsx,.xls,.pdf" onchange="handleFileUpload(event)">
+                </div>
+
+                <div class="form-group">
+                    <label>Or Paste Raw Logger Text</label>
+                    <textarea id="paste-input" rows="5" placeholder="Paste timestamp and temp readings here..."></textarea>
+                    <button class="btn btn-secondary" style="margin-top: 6px; width: 100%; font-size: 0.8rem;" onclick="handlePasteInput()">Process Pasted Data</button>
+                </div>
+
+                <button class="btn btn-reset" onclick="resetWorkspace()">🔄 Reset Workspace</button>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Analysis Summary</div>
+                <div id="summary-content">
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">Upload or paste data to view log statistics.</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chart & Analysis Area -->
+        <main>
+            <div class="card">
+                <div class="card-title">
+                    <span id="active-filename-display">Continuous Temperature Trend Line</span>
+                    <span id="disposition-badge" class="status-badge" style="display:none;">---</span>
+                </div>
+
+                <div class="chart-controls">
+                    <div>
+                        <label style="margin:0;">Start:</label>
+                        <input type="datetime-local" id="filter-start">
+                    </div>
+                    <div>
+                        <label style="margin:0;">End:</label>
+                        <input type="datetime-local" id="filter-end">
+                    </div>
+                    <button class="btn" onclick="applyFilterWindow()" style="padding: 6px 12px; font-size: 0.85rem;">✓ Apply Filter Window</button>
+                    <div style="margin-left: auto;">
+                        <label style="margin:0;">Min °F:</label>
+                        <input type="number" id="graph-min-f" value="30" style="width: 60px;">
+                        <label style="margin:0; margin-left:6px;">Max °F:</label>
+                        <input type="number" id="graph-max-f" value="80" style="width: 60px;">
+                    </div>
+                </div>
+
+                <div class="zoom-toolbar">
+                    <button class="btn-zoom" onclick="zoomGraph(1.2)">🔍 Zoom In (+)</button>
+                    <button class="btn-zoom" onclick="zoomGraph(0.8)">🔍 Zoom Out (-)</button>
+                    <button class="btn-zoom" onclick="resetZoom()">🔄 Reset Zoom</button>
+                    <span style="font-size:0.75rem; color:var(--text-muted); margin-left:auto; align-self:center;">💡 Hover to inspect points | <b>Click & Drag</b> to zoom range</span>
+                </div>
+
+                <canvas id="tempChart"></canvas>
+            </div>
+
+            <!-- Compliance Audit Insight Section -->
+            <div class="card">
+                <div class="card-title">Compliance Audit Insights</div>
+                <div id="audit-insight-box" class="audit-box">
+                    Awaiting data upload to evaluate compliance against selected temperature plan.
+                </div>
+            </div>
+
+            <!-- Exposure Table -->
+            <div class="card">
+                <div class="card-title">Multi-Tier Threshold Exposure Breakdown (Fail Threshold ≥ 101.0%)</div>
+                <table id="exposure-table">
+                    <thead>
+                        <tr>
+                            <th>Tier / Temperature Range</th>
+                            <th>Tier Type</th>
+                            <th>Allowed Limit</th>
+                            <th>Actual Elapsed Exposure</th>
+                            <th>Tier Utilization %</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: var(--text-muted);">No log data evaluated yet.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Editor for Custom Compliance Plans -->
+    <div class="modal-overlay" id="plan-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Edit Compliance Plans</h3>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="btn" onclick="createNewPlan()" style="padding: 4px 10px; font-size: 0.8rem;">➕ Create New Plan</button>
+                    <button onclick="closePlanModal()" style="background:none; border:none; color: var(--text-main); font-size: 1.2rem; cursor:pointer;">✕</button>
+                </div>
+            </div>
+            
+            <div class="form-group" style="display: flex; gap: 8px; align-items: flex-end;">
+                <div style="flex: 1; margin-bottom: 0;">
+                    <label>Select Plan to Modify</label>
+                    <select id="modal-plan-select" onchange="loadPlanIntoModal()"></select>
+                </div>
+                <button class="btn btn-danger" onclick="deleteCurrentPlan()" style="padding: 10px 14px; font-size: 0.85rem;" title="Delete Selected Plan">🗑️ Delete</button>
+            </div>
+
+            <!-- Export / Import Control Row -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; background: #0f172a; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
+                <div>
+                    <label style="font-size:0.75rem; margin-bottom:4px;">Single Selected Plan</label>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="btn btn-secondary" onclick="exportCurrentPlanJSON()" style="flex: 1; font-size: 0.75rem; padding: 6px;">📤 Export</button>
+                        <button class="btn btn-secondary" onclick="document.getElementById('import-plan-file').click()" style="flex: 1; font-size: 0.75rem; padding: 6px;">📥 Import</button>
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size:0.75rem; margin-bottom:4px;">All Compliance Plans</label>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="btn btn-secondary" onclick="exportAllPlansJSON()" style="flex: 1; font-size: 0.75rem; padding: 6px;">📤 Export All</button>
+                        <button class="btn btn-secondary" onclick="document.getElementById('import-all-plans-file').click()" style="flex: 1; font-size: 0.75rem; padding: 6px;">📥 Import All</button>
+                    </div>
+                </div>
+            </div>
+            <input type="file" id="import-plan-file" accept=".json" style="display:none;" onchange="importPlanJSON(event)">
+            <input type="file" id="import-all-plans-file" accept=".json" style="display:none;" onchange="importAllPlansJSON(event)">
+
+            <div class="form-group" style="margin-top: 16px;">
+                <label>Plan Name</label>
+                <input type="text" id="modal-plan-name">
+            </div>
+
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+                <div class="form-group" style="flex: 1; margin-bottom:0;">
+                    <label>Optimal Low (°F)</label>
+                    <input type="number" step="0.1" id="modal-optimal-low">
+                </div>
+                <div class="form-group" style="flex: 1; margin-bottom:0;">
+                    <label>Optimal High (°F)</label>
+                    <input type="number" step="0.1" id="modal-optimal-high">
+                </div>
+            </div>
+
+            <label>Excursion Tiers</label>
+            <div id="modal-tiers-container"></div>
+            
+            <button class="btn btn-secondary" onclick="addModalTierRow()" style="width: 100%; margin-top: 8px; font-size: 0.8rem;">+ Add Excursion Tier</button>
+
+            <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="closePlanModal()">Cancel</button>
+                <button class="btn" onclick="savePlanFromModal()">Save Plan Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Editor for Logger Profile Names -->
+    <div class="modal-overlay" id="profile-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Edit Logger Profile Names</h3>
+                <button onclick="closeProfileModal()" style="background:none; border:none; color: var(--text-main); font-size: 1.2rem; cursor:pointer;">✕</button>
+            </div>
+            <div class="form-group">
+                <label>Customize display names for data logger hardware profiles</label>
+                <div id="profile-names-container"></div>
+            </div>
+            <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="closeProfileModal()">Cancel</button>
+                <button class="btn" onclick="saveProfileNames()">Save Profile Names</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Baked-in Default Compliance Plans (QC Plan #7 MRB Chicken included as primary default)
+        let compliancePlans = {
+            mrb_chicken_7: {
+                name: "QC Plan #7 MRB Chicken",
+                optimalLow: -999.0,
+                optimalHigh: 12.0,
+                ranges: [
+                    { low: 12.1, high: 999.9, allowed: 60, type: 'warm' }
+                ]
+            },
+            frozen_qc_2: {
+                name: "Frozen QC Plans 2",
+                optimalLow: -25.0,
+                optimalHigh: 25.0,
+                ranges: [
+                    { low: 25.1, high: 32.0, allowed: 2160, type: 'warm' },
+                    { low: 32.1, high: 40.0, allowed: 1080, type: 'warm' },
+                    { low: 40.1, high: 69.9, allowed: 720, type: 'warm' },
+                    { low: 70.0, high: 999.9, allowed: 180, type: 'warm' }
+                ]
+            },
+            cultured_dairy: {
+                name: "Cultured Dairy Plan",
+                optimalLow: 34.0,
+                optimalHigh: 45.0,
+                ranges: [
+                    { low: 45.1, high: 50.0, allowed: 720, type: 'warm' },
+                    { low: 50.1, high: 60.0, allowed: 240, type: 'warm' },
+                    { low: 60.1, high: 999.9, allowed: 60, type: 'warm' }
+                ]
+            },
+            standard_fresh: {
+                name: "Standard Fresh Plan",
+                optimalLow: 32.0,
+                optimalHigh: 41.0,
+                ranges: [
+                    { low: -99.9, high: 31.9, allowed: 120, type: 'cold' },
+                    { low: 41.1, high: 50.0, allowed: 360, type: 'warm' },
+                    { low: 50.1, high: 999.9, allowed: 120, type: 'warm' }
+                ]
+            }
+        };
+
+        // Baked-in Default Logger Hardware Profiles
+        let loggerProfiles = {
+            auto: "Auto-Detect Profile",
+            cargodata_lightning: "Cargo Data Lightning NFC (.xls/.xlsx)",
+            temptale: "Sensitech TempTale Series",
+            tive: "Tive Recorder (Celsius CSV)",
+            cryopak: "CryoPAK Recorder (DD/MM/YY)",
+            freshliance: "Freshliance Fresh Tag",
+            copeland: "Copeland Data Logger",
+            deltatrak: "DeltaTrak FlashLink",
+            logtag: "LogTag Recorders",
+            elpro_hobo: "Elpro / Onset HOBO"
+        };
+
+        let fullRawData = [];
+        let filteredData = [];
+        let activeFilename = "None";
+        let lastEvaluationResult = null;
+
+        let zoomState = {
+            startTimeMs: null,
+            endTimeMs: null,
+            isDragging: false,
+            dragStartX: 0,
+            dragCurrentX: 0
+        };
+
+        let mouseState = {
+            x: -1,
+            y: -1,
+            hovering: false
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadSavedPlans();
+            loadSavedProfiles();
+            populatePlanDropdowns();
+            populateProfileDropdown();
+            initMinMaxInputs();
+            initCanvasInteractiveEvents();
+        });
+
+        function loadSavedPlans() {
+            const saved = localStorage.getItem('coldtrace_custom_plans');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+                        compliancePlans = { ...compliancePlans, ...parsed };
+                    }
+                } catch(e) {
+                    console.error("Failed to parse custom plans", e);
+                }
+            }
+        }
+
+        function loadSavedProfiles() {
+            const saved = localStorage.getItem('coldtrace_custom_profiles');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+                        loggerProfiles = { ...loggerProfiles, ...parsed };
+                    }
+                } catch(e) {
+                    console.error("Failed to parse custom profiles", e);
+                }
+            }
+        }
+
+        function savePlansToStorage() {
+            localStorage.setItem('coldtrace_custom_plans', JSON.stringify(compliancePlans));
+        }
+
+        function saveProfilesToStorage() {
+            localStorage.setItem('coldtrace_custom_profiles', JSON.stringify(loggerProfiles));
+        }
+
+        function populatePlanDropdowns() {
+            const select = document.getElementById('plan-select');
+            const modalSelect = document.getElementById('modal-plan-select');
+            if (!select || !modalSelect) return;
+
+            const currentSelected = select.value;
+
+            select.innerHTML = '';
+            modalSelect.innerHTML = '';
+
+            for (let key in compliancePlans) {
+                let opt = document.createElement('option');
+                opt.value = key;
+                opt.innerText = compliancePlans[key].name;
+                select.appendChild(opt);
+
+                let optModal = document.createElement('option');
+                optModal.value = key;
+                optModal.innerText = compliancePlans[key].name;
+                modalSelect.appendChild(optModal);
+            }
+
+            if (compliancePlans[currentSelected]) {
+                select.value = currentSelected;
+                modalSelect.value = currentSelected;
+            } else {
+                select.value = 'mrb_chicken_7';
+                modalSelect.value = 'mrb_chicken_7';
+            }
+        }
+
+        function populateProfileDropdown() {
+            const select = document.getElementById('logger-profile-select');
+            if (!select) return;
+
+            const currentSelected = select.value;
+
+            select.innerHTML = '';
+            for (let key in loggerProfiles) {
+                let opt = document.createElement('option');
+                opt.value = key;
+                opt.innerText = loggerProfiles[key];
+                select.appendChild(opt);
+            }
+
+            if (loggerProfiles[currentSelected]) {
+                select.value = currentSelected;
+            } else {
+                select.value = 'cargodata_lightning';
+            }
+        }
+
+        function openProfileModal() {
+            const container = document.getElementById('profile-names-container');
+            container.innerHTML = '';
+
+            for (let key in loggerProfiles) {
+                let div = document.createElement('div');
+                div.className = 'form-group';
+                div.style.marginBottom = '10px';
+                div.innerHTML = `
+                    <label style="font-size: 0.75rem; margin-bottom: 2px;">Key: ${escapeHtml(key)}</label>
+                    <input type="text" data-profile-key="${escapeHtml(key)}" value="${escapeHtml(loggerProfiles[key])}">
+                `;
+                container.appendChild(div);
+            }
+            document.getElementById('profile-modal').style.display = 'flex';
+        }
+
+        function closeProfileModal() {
+            document.getElementById('profile-modal').style.display = 'none';
+        }
+
+        function saveProfileNames() {
+            const inputs = document.querySelectorAll('#profile-names-container input');
+            inputs.forEach(input => {
+                let key = input.getAttribute('data-profile-key');
+                let val = input.value.trim();
+                if (key && val) {
+                    loggerProfiles[key] = val;
+                }
+            });
+            saveProfilesToStorage();
+            populateProfileDropdown();
+            closeProfileModal();
+        }
+
+        function initMinMaxInputs() {
+            document.getElementById('graph-min-f').addEventListener('change', renderCanvasChart);
+            document.getElementById('graph-max-f').addEventListener('change', renderCanvasChart);
+        }
+
+        function parseLoggerTimestamp(str) {
+            if (!str) return null;
+            let cleaned = String(str).trim().replace(/^['"]|['"]$/g, '');
+            if (cleaned.startsWith('="') && cleaned.endsWith('"')) {
+                cleaned = cleaned.slice(2, -1);
+            }
+            
+            let d = new Date(cleaned);
+            if (!isNaN(d.getTime()) && d.getFullYear() > 2005 && d.getFullYear() < 2035) {
+                return d;
+            }
+
+            let parts = cleaned.match(/(\d{1,4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,4})[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+            if (parts) {
+                let p1 = parseInt(parts[1], 10), p2 = parseInt(parts[2], 10), p3 = parseInt(parts[3], 10);
+                let hrs = parseInt(parts[4], 10), mins = parseInt(parts[5], 10), secs = parts[6] ? parseInt(parts[6], 10) : 0;
+                let ampm = parts[7];
+
+                if (ampm) {
+                    if (ampm.toUpperCase() === 'PM' && hrs < 12) hrs += 12;
+                    if (ampm.toUpperCase() === 'AM' && hrs === 12) hrs = 0;
+                }
+
+                let year, month, day;
+                let profile = document.getElementById('logger-profile-select').value;
+                let isCryopak = (profile === 'cryopak');
+
+                if (p1 > 2000) { 
+                    year = p1; month = p2 - 1; day = p3; 
+                } else if (p3 > 2000) { 
+                    year = p3; 
+                    if (isCryopak || p1 > 12) {
+                        day = p1; month = p2 - 1;
+                    } else {
+                        month = p1 - 1; day = p2;
+                    }
+                } else { 
+                    return null; 
+                }
+
+                if (year > 2035 || year < 2020) return null;
+
+                let parsedDate = new Date(year, month, day, hrs, mins, secs);
+                if (!isNaN(parsedDate.getTime())) {
+                    return parsedDate;
+                }
+            }
+            return null;
+        }
+
+        function parseCSVLine(textLine) {
+            let result = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < textLine.length; i++) {
+                let c = textLine[i];
+                if (c === '"') {
+                    inQuotes = !inQuotes;
+                } else if (c === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += c;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            activeFilename = file.name;
+            document.getElementById('active-filename-display').innerText = `Continuous Temperature Trend Line (${activeFilename})`;
+
+            const reader = new FileReader();
+            const ext = file.name.split('.').pop().toLowerCase();
+
+            if (ext === 'xlsx' || ext === 'xls') {
+                reader.onload = function(e) {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const csvText = XLSX.utils.sheet_to_csv(firstSheet);
+                    processRawText(csvText);
+                };
+                reader.readAsArrayBuffer(file);
+            } else if (ext === 'pdf') {
+                reader.onload = function(e) {
+                    const typedarray = new Uint8Array(e.target.result);
+                    pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+                        let maxPages = pdf.numPages;
+                        let pagePromises = [];
+                        for (let j = 1; j <= maxPages; j++) {
+                            pagePromises.push(
+                                pdf.getPage(j).then(page => {
+                                    return page.getTextContent().then(textContent => {
+                                        let rowsMap = {};
+                                        textContent.items.forEach(item => {
+                                            let y = Math.round(item.transform[5] / 5) * 5;
+                                            if (!rowsMap[y]) rowsMap[y] = [];
+                                            rowsMap[y].push({ x: item.transform[4], str: item.str });
+                                        });
+                                        let sortedYs = Object.keys(rowsMap).sort((a, b) => b - a);
+                                        let pageLines = sortedYs.map(y => {
+                                            rowsMap[y].sort((a, b) => a.x - b.x);
+                                            return rowsMap[y].map(i => i.str).join(' ');
+                                        });
+                                        return pageLines.join('\n');
+                                    });
+                                })
+                            );
+                        }
+                        Promise.all(pagePromises).then(pagesText => {
+                            let fullText = pagesText.join('\n');
+                            processRawText(fullText);
+                        });
+                    }).catch(err => {
+                        alert("Error reading PDF file: " + err.message);
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                reader.onload = function(e) {
+                    processRawText(e.target.result);
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        function handlePasteInput() {
+            const text = document.getElementById('paste-input').value;
+            if (text.trim().length > 0) {
+                activeFilename = "Pasted Data Stream";
+                document.getElementById('active-filename-display').innerText = `Continuous Temperature Trend Line (${activeFilename})`;
+                processRawText(text);
+            } else {
+                alert("Please paste logger data into the text box first.");
+            }
+        }
+
+        function processRawText(text) {
+            const lines = text.split(/\r?\n/);
+            let parsedRows = [];
+            let profile = document.getElementById('logger-profile-select').value;
+
+            let isCargoData = (profile === 'cargodata_lightning' || text.includes('Cargo Data') || text.includes('P.O.#') || text.toLowerCase().includes('inspector'));
+            let isTempTale = (profile === 'temptale' || text.includes('TempTale') || text.includes('Sensitech') || text.includes('Primary ( F)'));
+
+            // 1. Cargo Data Lightning NFC parser
+            if (isCargoData && !isTempTale) {
+                let timeColIdx = -1;
+                let tempColIdx = -1;
+
+                for (let line of lines) {
+                    if (!line.trim()) continue;
+                    let parts = parseCSVLine(line);
+                    let lowerLine = line.toLowerCase();
+
+                    if (timeColIdx === -1 && (lowerLine.includes('date/time') || lowerLine.includes('date / time') || lowerLine.includes('timestamp'))) {
+                        for (let i = 0; i < parts.length; i++) {
+                            let p = parts[i].toLowerCase();
+                            if (p.includes('date') || p.includes('time') || p.includes('timestamp')) {
+                                timeColIdx = i;
+                            }
+                            if (p.includes('temp') || p.includes('f') || p.includes('c')) {
+                                tempColIdx = i;
+                            }
+                        }
+                        continue;
+                    }
+
+                    if (timeColIdx !== -1 && tempColIdx !== -1 && parts.length > Math.max(timeColIdx, tempColIdx)) {
+                        let t = parseLoggerTimestamp(parts[timeColIdx]);
+                        let tempVal = parseFloat(parts[tempColIdx].replace(/[^-\d.]/g, ''));
+
+                        if (t && !isNaN(tempVal) && tempVal >= -100 && tempVal <= 150) {
+                            parsedRows.push({ time: t, temp: tempVal });
+                        }
+                    }
+                }
+            }
+
+            // 2. Sensitech TempTale4 tabular parser
+            if (parsedRows.length === 0 && (isTempTale || text.includes('Primary ( F)'))) {
+                let timeColIdx = -1;
+                let tempColIdx = -1;
+
+                for (let line of lines) {
+                    if (!line.trim()) continue;
+                    let parts = parseCSVLine(line);
+                    let lowerLine = line.toLowerCase();
+
+                    if (timeColIdx === -1 && (lowerLine.includes('date') || lowerLine.includes('time') || lowerLine.includes('timestamp'))) {
+                        for (let i = 0; i < parts.length; i++) {
+                            let p = parts[i].toLowerCase();
+                            if (p.includes('date') || p.includes('time') || p.includes('timestamp')) {
+                                timeColIdx = i;
+                            }
+                            if (p.includes('temp') || p.includes('primary') || p.includes('ambient') || p.includes('f')) {
+                                tempColIdx = i;
+                            }
+                        }
+                        if (timeColIdx !== -1 && tempColIdx === -1) tempColIdx = 2;
+                        continue;
+                    }
+
+                    if (timeColIdx !== -1 && tempColIdx !== -1 && parts.length > Math.max(timeColIdx, tempColIdx)) {
+                        let t = parseLoggerTimestamp(parts[timeColIdx]);
+                        let tempVal = parseFloat(parts[tempColIdx].replace(/[^-\d.]/g, ''));
+
+                        if (t && !isNaN(tempVal) && tempVal >= -100 && tempVal <= 150) {
+                            parsedRows.push({ time: t, temp: tempVal });
+                        }
+                    }
+                }
+            }
+
+            // 3. Fallback generic parser
+            if (parsedRows.length === 0) {
+                for (let line of lines) {
+                    if (!line.trim()) continue;
+                    let cleanLine = line.replace(/\x00/g, '').trim();
+                    let parts = parseCSVLine(cleanLine);
+
+                    let timeVal = null;
+                    let tempVal = null;
+
+                    for (let i = 0; i < parts.length; i++) {
+                        let t = parseLoggerTimestamp(parts[i]);
+                        if (t) {
+                            timeVal = t;
+                            break;
+                        }
+                    }
+
+                    for (let i = 1; i < parts.length; i++) {
+                        let rawToken = parts[i];
+                        let cleanToken = rawToken.replace(/[^-\d.]/g, '');
+                        let num = parseFloat(cleanToken);
+                        if (!isNaN(num) && num >= -100 && num <= 150 && cleanToken !== '') {
+                            if (cleanToken.includes('.') || Math.abs(num) > 50 || parts.length <= 3) {
+                                tempVal = num;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (timeVal && tempVal !== null) {
+                        parsedRows.push({ time: timeVal, temp: tempVal });
+                    }
+                }
+            }
+
+            if (parsedRows.length === 0) {
+                alert("No valid timestamp and temperature data found in the file using the selected hardware profile.");
+                return;
+            }
+
+            parsedRows.sort((a, b) => a.time - b.time);
+            fullRawData = parsedRows;
+            
+            initFilterBounds();
+            adjustGraphScaleToData();
+            evaluateCompliance();
+        }
+
+        function initFilterBounds() {
+            if (fullRawData.length === 0) return;
+            const start = fullRawData[0].time;
+            const end = fullRawData[fullRawData.length - 1].time;
+
+            document.getElementById('filter-start').value = formatDateForInput(start);
+            document.getElementById('filter-end').value = formatDateForInput(end);
+            
+            filteredData = [...fullRawData];
+            zoomState.startTimeMs = start.getTime();
+            zoomState.endTimeMs = end.getTime();
+        }
+
+        function formatDateForInput(date) {
+            const pad = (n) => n.toString().padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+
+        function adjustGraphScaleToData() {
+            if (fullRawData.length === 0) return;
+            let min = Math.min(...fullRawData.map(d => d.temp));
+            let max = Math.max(...fullRawData.map(d => d.temp));
+
+            document.getElementById('graph-min-f').value = Math.floor(min - 5);
+            document.getElementById('graph-max-f').value = Math.ceil(max + 5);
+        }
+
+        function applyFilterWindow() {
+            const sVal = document.getElementById('filter-start').value;
+            const eVal = document.getElementById('filter-end').value;
+
+            if (!sVal || !eVal) return;
+
+            const sDate = new Date(sVal);
+            const eDate = new Date(eVal);
+
+            filteredData = fullRawData.filter(d => d.time >= sDate && d.time <= eDate);
+            zoomState.startTimeMs = sDate.getTime();
+            zoomState.endTimeMs = eDate.getTime();
+
+            evaluateCompliance();
+        }
+
+        function resetWorkspace() {
+            fullRawData = [];
+            filteredData = [];
+            activeFilename = "None";
+            zoomState.startTimeMs = null;
+            zoomState.endTimeMs = null;
+
+            document.getElementById('file-input').value = '';
+            document.getElementById('paste-input').value = '';
+            document.getElementById('filter-start').value = '';
+            document.getElementById('filter-end').value = '';
+            document.getElementById('graph-min-f').value = '30';
+            document.getElementById('graph-max-f').value = '80';
+            document.getElementById('active-filename-display').innerText = `Continuous Temperature Trend Line`;
+
+            document.getElementById('disposition-badge').style.display = 'none';
+
+            document.getElementById('summary-content').innerHTML = `
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Upload or paste data to view log statistics.</p>
+            `;
+
+            document.getElementById('audit-insight-box').innerHTML = `
+                Awaiting data upload to evaluate compliance against selected temperature plan.
+            `;
+
+            document.querySelector('#exposure-table tbody').innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; color: var(--text-muted);">No log data evaluated yet.</td>
+                </tr>
+            `;
+
+            const canvas = document.getElementById('tempChart');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function initCanvasInteractiveEvents() {
+            const canvas = document.getElementById('tempChart');
+
+            canvas.addEventListener('wheel', (e) => {
+                if (filteredData.length === 0 || !zoomState.startTimeMs) return;
+                e.preventDefault();
+
+                const factor = e.deltaY < 0 ? 0.85 : 1.15;
+                zoomGraph(factor);
+            }, { passive: false });
+
+            canvas.addEventListener('mousedown', (e) => {
+                if (fullRawData.length === 0) return;
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const paddingLeft = 50;
+                const paddingRight = 30;
+                
+                if (x >= paddingLeft && x <= canvas.width - paddingRight) {
+                    zoomState.isDragging = true;
+                    zoomState.dragStartX = x;
+                    zoomState.dragCurrentX = x;
+                }
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                mouseState.x = e.clientX - rect.left;
+                mouseState.y = e.clientY - rect.top;
+                mouseState.hovering = true;
+
+                if (zoomState.isDragging) {
+                    zoomState.dragCurrentX = Math.max(50, Math.min(mouseState.x, canvas.width - 30));
+                }
+                renderCanvasChart();
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                mouseState.hovering = false;
+                renderCanvasChart();
+            });
+
+            window.addEventListener('mouseup', (e) => {
+                if (!zoomState.isDragging) return;
+                zoomState.isDragging = false;
+
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const x1 = Math.min(zoomState.dragStartX, x);
+                const x2 = Math.max(zoomState.dragStartX, x);
+
+                const paddingLeft = 50;
+                const paddingRight = 30;
+                const graphWidth = canvas.width - paddingLeft - paddingRight;
+
+                if (x2 - x1 > 15 && graphWidth > 0) {
+                    const startTime = zoomState.startTimeMs;
+                    const endTime = zoomState.endTimeMs;
+                    const timeSpan = endTime - startTime;
+
+                    const newStartTime = startTime + ((x1 - paddingLeft) / graphWidth) * timeSpan;
+                    const newEndTime = startTime + ((x2 - paddingLeft) / graphWidth) * timeSpan;
+
+                    zoomState.startTimeMs = newStartTime;
+                    zoomState.endTimeMs = newEndTime;
+
+                    const newStartDate = new Date(newStartTime);
+                    const newEndDate = new Date(newEndTime);
+
+                    document.getElementById('filter-start').value = formatDateForInput(newStartDate);
+                    document.getElementById('filter-end').value = formatDateForInput(newEndDate);
+
+                    filteredData = fullRawData.filter(d => d.time >= newStartDate && d.time <= newEndDate);
+                    evaluateCompliance();
+                } else {
+                    renderCanvasChart();
+                }
+            });
+        }
+
+        function zoomGraph(factor) {
+            if (!zoomState.startTimeMs || !zoomState.endTimeMs) return;
+
+            const center = (zoomState.startTimeMs + zoomState.endTimeMs) / 2;
+            const halfSpan = ((zoomState.endTimeMs - zoomState.startTimeMs) / 2) * factor;
+
+            if (halfSpan * 2 < 120000 && factor < 1) return;
+
+            zoomState.startTimeMs = center - halfSpan;
+            zoomState.endTimeMs = center + halfSpan;
+
+            renderCanvasChart();
+        }
+
+        function resetZoom() {
+            if (fullRawData.length === 0) return;
+            zoomState.startTimeMs = fullRawData[0].time.getTime();
+            zoomState.endTimeMs = fullRawData[fullRawData.length - 1].time.getTime();
+            initFilterBounds();
+            applyFilterWindow();
+        }
+
+        function evaluateCompliance() {
+            if (filteredData.length === 0) return;
+
+            const planKey = document.getElementById('plan-select').value;
+            const plan = compliancePlans[planKey];
+            if (!plan) return;
+
+            let tierExposures = plan.ranges.map(r => ({ ...r, elapsedMinutes: 0 }));
+            let targetZoneMinutes = 0;
+            let unclassifiedMinutes = 0;
+            let dataGapMinutes = 0;
+            let totalElapsedMinutes = 0;
+
+            const optLow = plan.optimalLow !== undefined ? plan.optimalLow : -999;
+            const optHigh = plan.optimalHigh !== undefined ? plan.optimalHigh : 999;
+
+            for (let i = 0; i < filteredData.length - 1; i++) {
+                let current = filteredData[i];
+                let next = filteredData[i + 1];
+                let deltaMinutes = (next.time - current.time) / 60000;
+
+                if (deltaMinutes > 120) {
+                    dataGapMinutes += deltaMinutes;
+                }
+
+                totalElapsedMinutes += deltaMinutes;
+
+                if (current.temp >= optLow && current.temp <= optHigh) {
+                    targetZoneMinutes += deltaMinutes;
+                } else {
+                    let matchedTier = false;
+                    for (let tier of tierExposures) {
+                        if (current.temp >= tier.low && current.temp <= tier.high) {
+                            tier.elapsedMinutes += deltaMinutes;
+                            matchedTier = true;
+                            break;
+                        }
+                    }
+                    if (!matchedTier) {
+                        unclassifiedMinutes += deltaMinutes;
+                    }
+                }
+            }
+
+            let overallPass = true;
+            let maxUtilizationPct = 0;
+            let cumulativeUtilizationSum = 0;
+
+            tierExposures.forEach(tier => {
+                tier.utilizationPct = (tier.elapsedMinutes / tier.allowed) * 100;
+                cumulativeUtilizationSum += tier.utilizationPct;
+                if (tier.utilizationPct > maxUtilizationPct) {
+                    maxUtilizationPct = tier.utilizationPct;
+                }
+                if (tier.utilizationPct >= 100.0 || tier.elapsedMinutes > tier.allowed) {
+                    overallPass = false;
+                }
+            });
+
+            if (cumulativeUtilizationSum >= 101.0) {
+                overallPass = false;
+            }
+
+            const targetZonePct = totalElapsedMinutes > 0 ? ((targetZoneMinutes / totalElapsedMinutes) * 100).toFixed(1) : 0;
+
+            lastEvaluationResult = {
+                plan,
+                overallPass,
+                tierExposures,
+                targetZonePct,
+                maxUtilizationPct,
+                cumulativeUtilizationSum,
+                unclassifiedMinutes,
+                dataGapMinutes,
+                totalElapsedMinutes
+            };
+
+            updateUIResults(lastEvaluationResult);
+            renderCanvasChart();
+        }
+
+        function updateUIResults(res) {
+            const { plan, overallPass, tierExposures, targetZonePct, maxUtilizationPct, cumulativeUtilizationSum, unclassifiedMinutes, dataGapMinutes, totalElapsedMinutes } = res;
+            
+            const badge = document.getElementById('disposition-badge');
+            badge.style.display = 'inline-block';
+            badge.innerText = overallPass ? 'PASS' : 'FAIL';
+            badge.className = 'status-badge ' + (overallPass ? 'status-pass' : 'status-fail');
+
+            const minTemp = Math.min(...filteredData.map(d => d.temp)).toFixed(1);
+            const maxTemp = Math.max(...filteredData.map(d => d.temp)).toFixed(1);
+            const avgTemp = (filteredData.reduce((s, d) => s + d.temp, 0) / filteredData.length).toFixed(1);
+
+            document.getElementById('summary-content').innerHTML = `
+                <p><strong>File:</strong> ${escapeHtml(activeFilename)}</p>
+                <p><strong>Total Readings:</strong> ${filteredData.length}</p>
+                <p><strong>Duration:</strong> ${(totalElapsedMinutes / 60).toFixed(1)} hrs</p>
+                <p><strong>Min Temp:</strong> ${minTemp} °F</p>
+                <p><strong>Max Temp:</strong> ${maxTemp} °F</p>
+                <p><strong>Avg Temp:</strong> ${avgTemp} °F</p>
+                ${dataGapMinutes > 0 ? `<p style="color: #f87171;">⚠️ <strong>Data Gaps Detected:</strong> ${(dataGapMinutes/60).toFixed(1)} hrs</p>` : ''}
+            `;
+
+            document.getElementById('audit-insight-box').innerHTML = `
+                <strong>Compliance Plan:</strong> ${escapeHtml(plan.name)} (Optimal: ${plan.optimalLow}°F to ${plan.optimalHigh}°F)<br>
+                <strong>Receiving Dock Disposition:</strong> <span style="font-weight:bold; color: ${overallPass ? '#4ade80' : '#f87171'};">${overallPass ? 'ACCEPTED (PASS)' : 'REJECTED (FAIL)'}</span><br>
+                <strong>Max Tier Utilization:</strong> ${maxUtilizationPct.toFixed(1)}%<br>
+                <strong>Cumulative Tier Utilization Total:</strong> ${cumulativeUtilizationSum.toFixed(1)}% (Fail Threshold: ≥ 101.0%)<br>
+                <strong>Target Safe Zone Share:</strong> ${targetZonePct}% of duration<br>
+                ${unclassifiedMinutes > 0 ? `<span style="color: #94a3b8; font-size: 0.85rem;">(Note: ${Math.round(unclassifiedMinutes)} mins logged outside optimal range and defined tiers)</span>` : ''}
+            `;
+
+            const tbody = document.querySelector('#exposure-table tbody');
+            tbody.innerHTML = '';
+
+            tierExposures.forEach(tier => {
+                const tr = document.createElement('tr');
+                const isBreached = tier.utilizationPct >= 100.0 || tier.elapsedMinutes > tier.allowed;
+                
+                let utilColorClass = 'util-green';
+                if (tier.utilizationPct >= 100.0) utilColorClass = 'util-red';
+                else if (tier.utilizationPct >= 75.0) utilColorClass = 'util-yellow';
+
+                tr.innerHTML = `
+                    <td>${tier.low.toFixed(1)}°F to ${tier.high > 900 ? '∞' : tier.high.toFixed(1) + '°F'}</td>
+                    <td><span style="text-transform: capitalize;">${escapeHtml(tier.type)}</span> Excursion</td>
+                    <td>${tier.allowed} mins (${(tier.allowed / 60).toFixed(1)} hrs)</td>
+                    <td><strong>${Math.round(tier.elapsedMinutes)} mins</strong> (${(tier.elapsedMinutes / 60).toFixed(1)} hrs)</td>
+                    <td><span class="util-badge ${utilColorClass}">${tier.utilizationPct.toFixed(1)}%</span></td>
+                    <td><span class="status-badge ${isBreached ? 'status-fail' : 'status-pass'}">${isBreached ? 'FAIL' : 'PASS'}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            let totalColorClass = 'util-green';
+            if (cumulativeUtilizationSum >= 101.0) totalColorClass = 'util-red';
+            else if (cumulativeUtilizationSum >= 75.0) totalColorClass = 'util-yellow';
+
+            const totalTr = document.createElement('tr');
+            totalTr.className = 'table-total-row';
+            totalTr.innerHTML = `
+                <td colspan="4" style="text-align: right;">Total Cumulative Tier Utilization:</td>
+                <td><span class="util-badge ${totalColorClass}">${cumulativeUtilizationSum.toFixed(1)}%</span></td>
+                <td><span class="status-badge ${overallPass ? 'status-pass' : 'status-fail'}">${overallPass ? 'PASS' : 'FAIL'}</span></td>
+            `;
+            tbody.appendChild(totalTr);
+        }
+
+        function exportInspectionReport() {
+            if (!lastEvaluationResult) {
+                alert("Please load and evaluate a data log file first.");
+                return;
+            }
+            window.print();
+        }
+
+        function exportCurrentPlanJSON() {
+            const key = document.getElementById('modal-plan-select').value;
+            const plan = compliancePlans[key];
+            if (!plan) return;
+
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(plan, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `${plan.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_compliance_plan.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function exportAllPlansJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(compliancePlans, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `all_coldtrace_compliance_plans.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function importPlanJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedPlan = JSON.parse(e.target.result);
+                    if (!importedPlan.name || importedPlan.optimalLow === undefined || !Array.isArray(importedPlan.ranges)) {
+                        throw new Error("Invalid compliance plan structure.");
+                    }
+                    let newKey = 'imported_' + Date.now();
+                    compliancePlans[newKey] = importedPlan;
+                    savePlansToStorage();
+                    populatePlanDropdowns();
+                    document.getElementById('modal-plan-select').value = newKey;
+                    document.getElementById('plan-select').value = newKey;
+                    loadPlanIntoModal();
+                    evaluateCompliance();
+                    alert(`Successfully imported compliance plan: "${importedPlan.name}"`);
+                } catch(err) {
+                    alert("Failed to import plan JSON: " + err.message);
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function importAllPlansJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedPlans = JSON.parse(e.target.result);
+                    if (!importedPlans || typeof importedPlans !== 'object') {
+                        throw new Error("Invalid compliance plans collection structure.");
+                    }
+                    
+                    let importedCount = 0;
+                    for (let k in importedPlans) {
+                        let p = importedPlans[k];
+                        if (p.name && p.optimalLow !== undefined && Array.isArray(p.ranges)) {
+                            let targetKey = k.startsWith('custom_') || k.startsWith('imported_') ? k : 'plan_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+                            compliancePlans[targetKey] = p;
+                            importedCount++;
+                        }
+                    }
+
+                    if (importedCount === 0) {
+                        throw new Error("No valid compliance plans found in imported file.");
+                    }
+
+                    savePlansToStorage();
+                    populatePlanDropdowns();
+                    loadPlanIntoModal();
+                    evaluateCompliance();
+                    alert(`Successfully imported ${importedCount} compliance plan(s).`);
+                } catch(err) {
+                    alert("Failed to import plans collection JSON: " + err.message);
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file);
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function drawTooltipBubble(ctx, x, y, text1, text2) {
+            ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            const w1 = ctx.measureText(text1).width;
+            ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            const w2 = ctx.measureText(text2).width;
+
+            const boxWidth = Math.max(w1, w2) + 24;
+            const boxHeight = 48;
+            const radius = 8;
+            const pointerSize = 6;
+
+            let boxX = x - boxWidth / 2;
+            let boxY = y - boxHeight - pointerSize - 6;
+
+            if (boxX < 10) boxX = 10;
+            if (boxX + boxWidth > ctx.canvas.width - 10) boxX = ctx.canvas.width - boxWidth - 10;
+            if (boxY < 10) boxY = y + pointerSize + 12;
+
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetY = 3;
+
+            ctx.fillStyle = '#3b82f6';
+            ctx.beginPath();
+            ctx.moveTo(boxX + radius, boxY);
+            ctx.lineTo(boxX + boxWidth - radius, boxY);
+            ctx.quadraticCurveTo(boxX + boxWidth, boxY, boxX + boxWidth, boxY + radius);
+            ctx.lineTo(boxX + boxWidth, boxY + boxHeight - radius);
+            ctx.quadraticCurveTo(boxX + boxWidth, boxY + boxHeight, boxX + boxWidth - radius, boxY + boxHeight);
+
+            if (boxY < y) {
+                ctx.lineTo(x + pointerSize, boxY + boxHeight);
+                ctx.lineTo(x, boxY + boxHeight + pointerSize);
+                ctx.lineTo(x - pointerSize, boxY + boxHeight);
+            }
+            ctx.lineTo(boxX + radius, boxY + boxHeight);
+            ctx.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - radius);
+            ctx.lineTo(boxX, boxY + radius);
+            ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.shadowColor = 'transparent';
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 13px sans-serif';
+            ctx.fillText(text1, boxX + 12, boxY + 20);
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.font = '11px sans-serif';
+            ctx.fillText(text2, boxX + 12, boxY + 38);
+        }
+
+        function renderCanvasChart() {
+            const canvas = document.getElementById('tempChart');
+            const ctx = canvas.getContext('2d');
+
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (fullRawData.length === 0) return;
+
+            const padding = { top: 30, right: 30, bottom: 50, left: 50 };
+            const graphWidth = canvas.width - padding.left - padding.right;
+            const graphHeight = canvas.height - padding.top - padding.bottom;
+
+            const minF = parseFloat(document.getElementById('graph-min-f').value) || 30;
+            const maxF = parseFloat(document.getElementById('graph-max-f').value) || 80;
+
+            const startTime = zoomState.startTimeMs || fullRawData[0].time.getTime();
+            const endTime = zoomState.endTimeMs || fullRawData[fullRawData.length - 1].time.getTime();
+            const timeSpan = endTime - startTime || 1;
+
+            const getX = (t) => padding.left + ((t.getTime() - startTime) / timeSpan) * graphWidth;
+            const getY = (temp) => padding.top + graphHeight - ((temp - minF) / (maxF - minF)) * graphHeight;
+
+            const planKey = document.getElementById('plan-select').value;
+            const plan = compliancePlans[planKey];
+            
+            let safeLow = plan && plan.optimalLow !== undefined ? plan.optimalLow : minF;
+            let safeHigh = plan && plan.optimalHigh !== undefined ? plan.optimalHigh : maxF;
+
+            const safeYTop = getY(safeHigh);
+            const safeYBottom = getY(safeLow);
+            ctx.fillStyle = 'rgba(74, 222, 128, 0.12)';
+            ctx.fillRect(padding.left, Math.max(padding.top, safeYTop), graphWidth, Math.min(graphHeight, Math.max(1, safeYBottom - safeYTop)));
+
+            ctx.fillStyle = '#4ade80';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.fillText(`TARGET SAFE ZONE (${safeLow.toFixed(1)}°F - ${safeHigh.toFixed(1)}°F)`, padding.left + 10, Math.max(padding.top + 15, safeYTop + 16));
+
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '10px sans-serif';
+
+            const stepF = (maxF - minF) / 6;
+            for (let i = 0; i <= 6; i++) {
+                let val = minF + (stepF * i);
+                let y = getY(val);
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(canvas.width - padding.right, y);
+                ctx.stroke();
+
+                ctx.fillText(`${Math.round(val)}°F`, 10, y + 3);
+            }
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(padding.left, padding.top, graphWidth, graphHeight);
+            ctx.clip();
+
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            let drawing = false;
+            let pointPositions = [];
+
+            fullRawData.forEach((d) => {
+                let x = getX(d.time);
+                let y = getY(d.temp);
+
+                if (x >= padding.left - 50 && x <= canvas.width - padding.right + 50) {
+                    pointPositions.push({ x, y, data: d });
+                    if (!drawing) { ctx.moveTo(x, y); drawing = true; }
+                    else ctx.lineTo(x, y);
+                }
+            });
+            ctx.stroke();
+            ctx.restore();
+
+            if (mouseState.hovering && !zoomState.isDragging && pointPositions.length > 0) {
+                let nearestPoint = null;
+                let minDist = Infinity;
+
+                pointPositions.forEach(p => {
+                    let dist = Math.abs(p.x - mouseState.x);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearestPoint = p;
+                    }
+                });
+
+                if (nearestPoint && mouseState.x >= padding.left && mouseState.x <= canvas.width - padding.right) {
+                    ctx.strokeStyle = 'rgba(148, 163, 184, 0.7)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([4, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(nearestPoint.x, padding.top);
+                    ctx.lineTo(nearestPoint.x, canvas.height - padding.bottom);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    ctx.fillStyle = 'rgba(59, 130, 246, 0.25)';
+                    ctx.beginPath();
+                    ctx.arc(nearestPoint.x, nearestPoint.y, 9, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#2563eb';
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(nearestPoint.x, nearestPoint.y, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    let tempStr = `${nearestPoint.data.temp.toFixed(2)}°F`;
+                    let monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                    let monthStr = monthNames[nearestPoint.data.time.getMonth()];
+                    let dayStr = nearestPoint.data.time.getDate();
+                    let hours = nearestPoint.data.time.getHours();
+                    let minutes = nearestPoint.data.time.getMinutes().toString().padStart(2, '0');
+                    let ampm = hours >= 12 ? 'PM' : 'AM';
+                    hours = hours % 12 || 12;
+                    let timeFormatted = `${monthStr} ${dayStr} - ${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+
+                    drawTooltipBubble(ctx, nearestPoint.x, nearestPoint.y, tempStr, timeFormatted);
+                }
+            }
+
+            if (zoomState.isDragging) {
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.25)';
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+                let boxX = Math.min(zoomState.dragStartX, zoomState.dragCurrentX);
+                let boxWidth = Math.abs(zoomState.dragCurrentX - zoomState.dragStartX);
+                ctx.fillRect(boxX, padding.top, boxWidth, graphHeight);
+                ctx.strokeRect(boxX, padding.top, boxWidth, graphHeight);
+                ctx.setLineDash([]);
+            }
+
+            const tickCount = 5;
+            for (let i = 0; i <= tickCount; i++) {
+                let t = new Date(startTime + (timeSpan * (i / tickCount)));
+                let x = padding.left + (graphWidth * (i / tickCount));
+
+                let month = (t.getMonth() + 1).toString().padStart(2, '0');
+                let day = t.getDate().toString().padStart(2, '0');
+
+                let hours = t.getHours();
+                let minutes = t.getMinutes().toString().padStart(2, '0');
+                let ampm = hours >= 12 ? 'PM' : 'AM';
+                hours = hours % 12;
+                hours = hours ? hours : 12;
+
+                let dateStr = `${month}/${day}/${t.getFullYear()}`;
+                let timeStr = `${hours}:${minutes} ${ampm}`;
+
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText(dateStr, x - 28, canvas.height - 22);
+                ctx.fillText(timeStr, x - 22, canvas.height - 8);
+
+                ctx.beginPath();
+                ctx.moveTo(x, canvas.height - padding.bottom);
+                ctx.lineTo(x, canvas.height - padding.bottom + 5);
+                ctx.stroke();
+            }
+        }
+
+        function openPlanModal() {
+            document.getElementById('plan-modal').style.display = 'flex';
+            loadPlanIntoModal();
+        }
+
+        function closePlanModal() {
+            document.getElementById('plan-modal').style.display = 'none';
+        }
+
+        function loadPlanIntoModal() {
+            const key = document.getElementById('modal-plan-select').value;
+            const plan = compliancePlans[key];
+            if (!plan) return;
+
+            document.getElementById('modal-plan-name').value = plan.name;
+            document.getElementById('modal-optimal-low').value = plan.optimalLow !== undefined ? plan.optimalLow : -25.0;
+            document.getElementById('modal-optimal-high').value = plan.optimalHigh !== undefined ? plan.optimalHigh : 25.0;
+
+            const container = document.getElementById('modal-tiers-container');
+            container.innerHTML = '';
+
+            plan.ranges.forEach(r => {
+                addModalTierRow(r.low, r.high, r.allowed, r.type);
+            });
+        }
+
+        function createNewPlan() {
+            let planName = prompt("Enter a name for the new compliance plan:");
+            if (!planName || !planName.trim()) return;
+
+            let planKey = 'custom_' + Date.now();
+            compliancePlans[planKey] = {
+                name: planName.trim(),
+                optimalLow: -10.0,
+                optimalHigh: 10.0,
+                ranges: [
+                    { low: 10.1, high: 30.0, allowed: 120, type: 'warm' }
+                ]
+            };
+
+            savePlansToStorage();
+            populatePlanDropdowns();
+            
+            document.getElementById('modal-plan-select').value = planKey;
+            loadPlanIntoModal();
+        }
+
+        function deleteCurrentPlan() {
+            const select = document.getElementById('modal-plan-select');
+            const key = select.value;
+            const planKeys = Object.keys(compliancePlans);
+
+            if (planKeys.length <= 1) {
+                alert("You must keep at least one compliance plan in the system.");
+                return;
+            }
+
+            const planName = compliancePlans[key] ? compliancePlans[key].name : key;
+            if (!confirm(`Are you sure you want to delete the plan "${planName}"?`)) {
+                return;
+            }
+
+            delete compliancePlans[key];
+            savePlansToStorage();
+            populatePlanDropdowns();
+
+            const remainingKeys = Object.keys(compliancePlans);
+            if (remainingKeys.length > 0) {
+                select.value = remainingKeys[0];
+                document.getElementById('plan-select').value = remainingKeys[0];
+                loadPlanIntoModal();
+            }
+
+            evaluateCompliance();
+        }
+
+        function addModalTierRow(low = 0, high = 0, allowed = 60, type = 'warm') {
+            const container = document.getElementById('modal-tiers-container');
+            const div = document.createElement('div');
+            div.className = 'tier-row';
+            div.innerHTML = `
+                <input type="number" step="0.1" value="${low}" style="width: 70px;" placeholder="Low °F">
+                <span>to</span>
+                <input type="number" step="0.1" value="${high}" style="width: 70px;" placeholder="High °F">
+                <input type="number" value="${allowed}" style="width: 80px;" placeholder="Mins">
+                <select style="width: 80px;">
+                    <option value="warm" ${type === 'warm' ? 'selected' : ''}>Warm</option>
+                    <option value="cold" ${type === 'cold' ? 'selected' : ''}>Cold</option>
+                </select>
+                <button onclick="this.parentElement.remove()" style="color:#f87171; border:none; background:none; cursor:pointer;">✕</button>
+            `;
+            container.appendChild(div);
+        }
+
+        function savePlanFromModal() {
+            const key = document.getElementById('modal-plan-select').value;
+            const name = document.getElementById('modal-plan-name').value;
+            const optimalLow = parseFloat(document.getElementById('modal-optimal-low').value);
+            const optimalHigh = parseFloat(document.getElementById('modal-optimal-high').value);
+            const rows = document.querySelectorAll('#modal-tiers-container .tier-row');
+
+            if (isNaN(optimalLow) || isNaN(optimalHigh)) {
+                alert("Temperature bounds must be valid numbers.");
+                return;
+            }
+
+            let ranges = [];
+            let isValid = true;
+            rows.forEach(r => {
+                let inputs = r.querySelectorAll('input');
+                let select = r.querySelector('select');
+                let lowVal = parseFloat(inputs[0].value);
+                let highVal = parseFloat(inputs[1].value);
+                let allowedVal = parseInt(inputs[2].value, 10);
+
+                if (isNaN(lowVal) || isNaN(highVal) || isNaN(allowedVal)) {
+                    isValid = false;
+                }
+                ranges.push({
+                    low: lowVal,
+                    high: highVal,
+                    allowed: allowedVal,
+                    type: select.value
+                });
+            });
+
+            if (!isValid) {
+                alert("All tier fields must be filled out with valid numbers before saving.");
+                return;
+            }
+
+            compliancePlans[key] = { name, optimalLow, optimalHigh, ranges };
+            savePlansToStorage();
+            populatePlanDropdowns();
+            document.getElementById('plan-select').value = key;
+            closePlanModal();
+            evaluateCompliance();
+        }
+    </script>
+</body>
+</html>
